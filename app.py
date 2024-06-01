@@ -75,7 +75,9 @@ def get_attractions(
     params.append(limit)
     params.append(offset)
     
-    with get_db_connection() as cnx, cnx.cursor(dictionary=True) as cursor:
+    try:
+        cnx = get_db_connection()
+        cursor = cnx.cursor(dictionary=True, buffered=True)
         # Execute the main query
         cursor.execute(query, params)
         attractions = cursor.fetchall()
@@ -93,6 +95,12 @@ def get_attractions(
         nextPage = page + 1 if (offset + limit) < total_attractions else None
         
         return {"nextPage": nextPage, "data": attractions} 
+    
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail="Database error")
+    finally:
+        cursor.close()
+        cnx.close()
     #有時候位子對，但是顯示錯誤，主要是因為 tab 跟空格
 
 
