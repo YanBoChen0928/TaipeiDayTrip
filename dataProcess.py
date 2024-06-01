@@ -10,6 +10,11 @@ json_file = 'data/taipei-attractions.json'
 with open(json_file, 'r', encoding='utf-8') as file:
     data = json.load(file)
 
+# 要記得處理一些 null，因為有兩筆資料的的 mrt 為none, 轉成空的字符串，不然在app.py使用pydantic(mrt:str)會有問題
+for result in data['result']['results']:
+    if result['MRT'] is None:
+        result['MRT'] = ''
+
 with mysql.connector.connect(
         host='localhost',
         user='wehelp',
