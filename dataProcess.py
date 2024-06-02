@@ -74,3 +74,8 @@ with mysql.connector.connect(
         except mysql.connector.Error as err:
             print(f"Error: {err}")
             cnx.rollback()
+        finally:
+            if cursor:
+                cursor.close()
+            if cnx:
+                cnx.close()
