@@ -1,5 +1,5 @@
 from fastapi import *
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 app=FastAPI()
 
 from fastapi import FastAPI, Query, HTTPException
@@ -7,15 +7,6 @@ from pydantic import BaseModel
 from typing import Optional
 import mysql.connector
 from mysql.connector import Error
-
-
-mysql_config = {
-    'host': 'localhost',
-    'user': 'wehelp',
-    'password': 'wehelp',
-    'database': 'TaipeiDayTrip_db'
-}
-
 
 # Static Pages (Never Modify Code in this Block)
 @app.get("/", include_in_schema=False)
@@ -31,7 +22,13 @@ async def booking(request: Request):
 async def thankyou(request: Request):
 	return FileResponse("./static/thankyou.html", media_type="text/html")
 
-#API: Attractions
+
+mysql_config = {
+    'host': 'localhost',
+    'user': 'wehelp',
+    'password': 'wehelp',
+    'database': 'TaipeiDayTrip_db'
+}
 class Attraction(BaseModel):
     id: int
     name: str
@@ -42,11 +39,15 @@ class Attraction(BaseModel):
     mrt: str
     lat: float
     lng: float
-    images: list[str]
+    images: Optional[list[str]]
 
-class ResponseModel(BaseModel):
+class ResponseAttractions(BaseModel):
     nextPage: Optional[int] = None
     data: list[Attraction]
+
+class ResponseAttractionId(BaseModel):
+    data: Attraction #只有單一、上面那個是多個，所以是list
+
 
 def get_db_connection():
     try:
@@ -56,7 +57,8 @@ def get_db_connection():
         print(f"Error connecting to MySQL Platform: {e}")
         raise HTTPException(status_code=500, detail="伺服器內部錯誤")
 
-@app.get("/api/attractions", response_model=ResponseModel)
+#API: Attractions
+@app.get("/api/attractions", response_model=ResponseAttractions)
 def get_attractions(
     page: int = Query(0, ge=0), #ge: greater than or equal to" 的縮寫
     keyword: str = Query(None)
@@ -93,20 +95,72 @@ def get_attractions(
         total_attractions = cursor.fetchone()['total']
 
         nextPage = page + 1 if (offset + limit) < total_attractions else None
-        
-        return {"nextPage": nextPage, "data": attractions} 
     
-    except mysql.connector.Error as e:
-        raise HTTPException(status_code=500, detail="Database error")
+    except Error as e:
+        print(f"Error connecting to API/Attractions: {e}")
+        raise HTTPException(status_code=500, detail="伺服器內部錯誤")
     finally:
         cursor.close()
         cnx.close()
     #有時候位子對，但是顯示錯誤，主要是因為 tab 跟空格
+        return {"nextPage": nextPage, "data": attractions}
 
 
+#Attraction_id API （還有bug要處理）
+@app.get("/api/attraction/{attraction_id}") #response_model=ResponseAttractionId
+def get_attraction(attraction_id: int):
+  try:
+    cnx = get_db_connection()
+    cursor = cnx.cursor(dictionary=True, buffered=True)
+    cursor.execute("SELECT * FROM attractions WHERE id = %s", (attraction_id,))
+    attraction = cursor.fetchone()
 
+    if not attraction:
+        raise HTTPException(status_code=400, detail="景點編號不正確")
 
+    cursor.execute("SELECT image_url FROM images WHERE attraction_id = %s", (attraction_id,))
+    images = cursor.fetchall()
+    attraction['images'] = [image['image_url'] for image in images]
+    print(f"lollolol, I got it:{attraction}")
+    
+   
+  except mysql.connector.Error as e:
+    print(f"Error connecting to Attractions_id: {e}")
+    raise HTTPException(status_code=500, detail="伺服器內部錯誤")
+  finally:
+    if cursor:
+        cursor.close()
+    if cnx:
+        cnx.close()
+        
+    return{"data": attraction}
+    #return Attraction(**attraction)  # 返回符合 Attractions 模型的資料結構
 
+#3rd MRT api
+@app.get("/api/mrts")
+def get_mrts():
+    cnx = get_db_connection()
+    cursor = cnx.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT mrt, COUNT(*) as attraction_count 
+        FROM attractions 
+        GROUP BY mrt 
+        ORDER BY attraction_count DESC
+    """)
+    mrt_data = cursor.fetchall()
+    mrt_stations = [mrt['mrt'] for mrt in mrt_data]
+
+    cursor.close()
+    cnx.close()
+    return {"data": mrt_stations}
+
+#異常的json response:
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": True, "message": exc.detail},
+    )
 
 
 # localhost test
