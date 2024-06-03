@@ -96,7 +96,7 @@ def get_attractions(
 
         nextPage = page + 1 if (offset + limit) < total_attractions else None
     
-    except Error as e:
+    except Exception as e:
         print(f"Error connecting to API/Attractions: {e}")
         raise HTTPException(status_code=500, detail="伺服器內部錯誤")
     finally:
@@ -124,9 +124,10 @@ def get_attraction(attraction_id: int):
     print(f"lollolol, I got it:{attraction}")
     
    
-  except mysql.connector.Error as e:
+  except Exception as e:
     print(f"Error connecting to Attractions_id: {e}")
     raise HTTPException(status_code=500, detail="伺服器內部錯誤")
+  
   finally:
     if cursor:
         cursor.close()
@@ -139,6 +140,7 @@ def get_attraction(attraction_id: int):
 #3rd MRT api
 @app.get("/api/mrts")
 def get_mrts():
+  try:
     cnx = get_db_connection()
     cursor = cnx.cursor(dictionary=True)
     cursor.execute("""
@@ -149,10 +151,14 @@ def get_mrts():
     """)
     mrt_data = cursor.fetchall()
     mrt_stations = [mrt['mrt'] for mrt in mrt_data]
-
+  
     cursor.close()
     cnx.close()
     return {"data": mrt_stations}
+  
+  except Exception as e:
+    print(f"Error connecting to mrt: {e}")
+    raise HTTPException(status_code=500, detail="伺服器內部錯誤")
 
 #異常的json response:
 @app.exception_handler(HTTPException)
